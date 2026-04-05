@@ -88,7 +88,7 @@ function deployToVercel(data) {
 
 const L = {
   en: {
-    q1: 'Welcome to <b>Mzansi Pros</b>!\n\nLet\'s get your website ready.\n\n<b>What is your business name and trade?</b>\n<i>e.g. Benny Painting, Sipho Plumbing</i>',
+    q1: 'Welcome to <b>Mzansi Pros</b>!\n\nWe build professional websites for tradespeople across South Africa. Five questions, 48 hours, and you have a website your customers can find.\n\nNo tech skills needed. No monthly fees. R589, once.\n\nLet\'s start.\n\n<b>What is your business name and trade?</b>\n<i>e.g. Benny Painting, Sipho Plumbing, Thandi Electricals</i>',
     q2: s => 'Got it - <b>' + s.name + '</b>\n\n<b>Which area do you serve?</b>\n<i>e.g. Mitchells Plain, Cape Town</i>',
     q3: '<b>What is your phone number for customers?</b>\n<i>e.g. 0821234567</i>',
     q4: '<b>Send a photo of your work.</b>\n<i>A clear photo of a completed job works best.</i>',
@@ -99,7 +99,7 @@ const L = {
     err: 'Something went wrong. Please try again.'
   },
   af: {
-    q1: 'Welkom by <b>Mzansi Pros</b>!\n\n<b>Wat is jou besigheidsnaam en ambag?</b>\n<i>bv. Benny Skilder, Sipho Loodgieter</i>',
+    q1: 'Welkom by <b>Mzansi Pros</b>!\n\nOns bou professionele webwerwe vir ambagsmanne regoor Suid-Afrika. Vyf vrae, 48 uur, en jy het \'n webwerf wat kli ente kan vind.\n\nGeen tegnologiese vaardighede nodig nie. Geen maandelikse fooie nie. R589, eenmalig.\n\nKom ons begin.\n\n<b>Wat is jou besigheidsnaam en ambag?</b>\n<i>bv. Benny Skilder, Sipho Loodgieter</i>',
     q2: s => 'Goed - <b>' + s.name + '</b>\n\n<b>Watter area bedien jy?</b>\n<i>bv. Mitchells Plain, Kaapstad</i>',
     q3: '<b>Wat is jou foonnommer vir kliente?</b>\n<i>bv. 0821234567</i>',
     q4: '<b>Stuur \'n foto van jou werk.</b>',
@@ -110,7 +110,7 @@ const L = {
     err: 'Iets het fout gegaan. Probeer weer.'
   },
   zu: {
-    q1: 'Siyakwamukela ku-<b>Mzansi Pros</b>!\n\n<b>Yiliphi igama lebhizinisi lakho?</b>\n<i>isb. Benny Ukupenda, Sipho Izicoci</i>',
+    q1: 'Siyakwamukela ku-<b>Mzansi Pros</b>!\n\nSakha izikhumbuzo zomsebenzi ezikhethekile kubantu abenza umsebenzi ngeminyakatizo yonke iNingizimu Afrika. Imibuzo emihlanu, amahora angama-48, futhi unezikhumbuzo ezizofinyelela kumagcokama.\n\nAkudingi ulwazi lobuchwepheshe. Akukho imali yenyanga. R589, kanye nje.\n\nAsiqale.\n\n<b>Yiliphi igama lebhizinisi lakho?</b>\n<i>isb. Benny Ukupenda, Sipho Izicoci</i>',
     q2: s => 'Kulungile - <b>' + s.name + '</b>\n\n<b>Yisiphi isigodi osebenza kuso?</b>',
     q3: '<b>Yini inombolo yakho yefoni?</b>',
     q4: '<b>Thumela isithombe somsebenzi wakho.</b>',
@@ -121,7 +121,7 @@ const L = {
     err: 'Kukhona inkinga. Zama futhi.'
   },
   xh: {
-    q1: 'Wamkelekile ku-<b>Mzansi Pros</b>!\n\n<b>Ngubani igama lebhizinisi lakho?</b>\n<i>umz. Benny Ukupenda, Sipho Izicoci</i>',
+    q1: 'Wamkelekile ku-<b>Mzansi Pros</b>!\n\nSakha iiwebhusayithi ezineenkathalo zabasebenzi kulo lonke uMzantsi Afrika. Imibuzo emihlanu, iiyure ezingama-48, unewebhusayithi abafumani bakho banokuifumana.\n\nAkufuneki izakhono zobuchwepheshe. Akukho iintlawulo zenyanga. R589, kanye.\n\nSiqale.\n\n<b>Ngubani igama lebhizinisi lakho?</b>\n<i>umz. Benny Ukupenda, Sipho Izicoci</i>',
     q2: s => 'Kulungile - <b>' + s.name + '</b>\n\n<b>Yeyiphi indawo osebenza kuyo?</b>',
     q3: '<b>Yintoni inombolo yakho yomnxeba?</b>',
     q4: '<b>Thumela umfanekiso womsebenzi wakho.</b>',
