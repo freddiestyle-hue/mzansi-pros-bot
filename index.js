@@ -68,10 +68,11 @@ function fill(t, d) { return t.replace(/\{\{(\w+)\}\}/g, (_, k) => (d[k] || ''))
 
 function deployToVercel(data) {
   const VERCEL_TOKEN = process.env.VERCEL_TOKEN
+  const PROJECT = process.env.VERCEL_PROJECT || ('mzansi-' + slugify(data.business_name))
   return fetchText('https://raw.githubusercontent.com/freddiestyle-hue/Mzansi/main/index.html').then(template => {
     const html = fill(template, data)
     const payload = JSON.stringify({
-      name: 'mzansi-' + slugify(data.business_name),
+      name: PROJECT,
       files: [{ file: 'index.html', data: Buffer.from(html).toString('base64'), encoding: 'base64' }],
       projectSettings: { framework: null }, target: 'production'
     })
