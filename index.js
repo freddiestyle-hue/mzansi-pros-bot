@@ -212,6 +212,52 @@ async function handle(chatId, message) {
   }
 }
 
+// SDR HITL: in-memory queue (loaded from env or remote)
+const sdrQueue = {}
+
+function tgAnswerCallback(id) {
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+  const payload = JSON.stringify({ callback_query_id: id })
+  return new Promise(resolve => {
+    const opts = { hostname: 'api.telegram.org', path: '/bot' + BOT_TOKEN + '/answerCallbackQuery', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } }
+    const req = https.request(opts, res => { res.on('data', () => {}); res.on('end', resolve) })
+    req.on('error', resolve); req.write(payload); req.end()
+  })
+}
+
+function tgEditMarkup(chatId, messageId, markup) {
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+  const payload = JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: markup })
+  return new Promise(resolve => {
+    const opts = { hostname: 'api.telegram.org', path: '/bot' + BOT_TOKEN + '/editMessageReplyMarkup', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } }
+    const req = https.request(opts, res => { res.on('data', () => {}); res.on('end', resolve) })
+    req.on('error', resolve); req.write(payload); req.end()
+  })
+}
+
+async function handleCallback(cb) {
+  const data = cb.data || ''
+  const chatId = cb.message?.chat?.id
+  const messageId = cb.message?.message_id
+  const [action, idxStr] = data.split(':')
+  const idx = parseInt(idxStr)
+
+  if (!['approve','skip','reject'].includes(action) || isNaN(idx)) return
+
+  const FRED = process.env.FRED_CHAT_ID || '6850556217'
+  const labels = { approve: 'Approved', skip: 'Skipped', reject: 'Rejected' }
+  const emojis = { approve: 'Approved', skip: 'Skipped', reject: 'Rejected' }
+
+  // Store in memory keyed by idx
+  sdrQueue[idx] = { action, ts: new Date().toISOString() }
+
+  // Remove buttons
+  await tgEditMarkup(chatId, messageId, { inline_keyboard: [] })
+  // Confirm
+  await sendMessage(FRED, `${labels[action]} #${idx + 1}`)
+  await tgAnswerCallback(cb.id)
+}
+
 const PORT = process.env.PORT || 3000
 http.createServer((req, res) => {
   if (req.method === 'GET') { res.end('Mzansi Pros Bot'); return }
@@ -221,8 +267,12 @@ http.createServer((req, res) => {
   req.on('end', async () => {
     try {
       const update = JSON.parse(body)
-      const message = update.message || update.edited_message
-      if (message) await handle(message.chat.id, message)
+      if (update.callback_query) {
+        await handleCallback(update.callback_query)
+      } else {
+        const message = update.message || update.edited_message
+        if (message) await handle(message.chat.id, message)
+      }
     } catch (e) { console.error(e) }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: true }))
