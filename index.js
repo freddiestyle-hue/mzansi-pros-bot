@@ -92,7 +92,7 @@ const L = {
     q2: s => 'Got it - <b>' + s.name + '</b>\n\n<b>Which area do you serve?</b>\n<i>e.g. Mitchells Plain, Cape Town</i>',
     q3: '<b>What is your phone number for customers?</b>\n<i>e.g. 0821234567</i>',
     q4: '<b>Send a photo of your work.</b>\n<i>A clear photo of a completed job works best.</i>',
-    q5: 'Almost done! <b>What services do you offer?</b>\n\nList one per line:\n<i>Interior painting\nExterior painting\nRoof painting</i>',
+    q5: 'Almost done! Tell us about your work:\n\n1. How many years experience do you have?\n2. What are your main services? (list them)\n3. What makes customers choose you?\n\n<i>e.g. 12 years. Interior painting, exterior, waterproofing. I am neat, on time and give free quotes.</i>',
     uploading: 'Uploading photo...',
     building: 'Building your website... About 30 seconds.',
     done: url => 'Your website is live!\n\n<b>' + url + '</b>\n\nShare this with your customers. Welcome to Mzansi Pros!',
@@ -103,7 +103,7 @@ const L = {
     q2: s => 'Goed - <b>' + s.name + '</b>\n\n<b>Watter area bedien jy?</b>\n<i>bv. Mitchells Plain, Kaapstad</i>',
     q3: '<b>Wat is jou foonnommer vir kliente?</b>\n<i>bv. 0821234567</i>',
     q4: '<b>Stuur \'n foto van jou werk.</b>',
-    q5: 'Amper klaar! <b>Watter dienste bied jy aan?</b>\n\nLys een per reel:\n<i>Binneskilder\nBuiteskilder</i>',
+    q5: 'Amper klaar! Vertel ons van jou werk:\n\n1. Hoeveel jaar ondervinding?\n2. Wat is jou hoofdi enste?\n3. Wat maak jou spesiaal?',
     uploading: 'Foto word opgelaai...',
     building: 'Webwerf word gebou... Sowat 30 sekondes.',
     done: url => 'Jou webwerf is lewendig!\n\n<b>' + url + '</b>\n\nWelkom by Mzansi Pros!',
@@ -114,7 +114,7 @@ const L = {
     q2: s => 'Kulungile - <b>' + s.name + '</b>\n\n<b>Yisiphi isigodi osebenza kuso?</b>',
     q3: '<b>Yini inombolo yakho yefoni?</b>',
     q4: '<b>Thumela isithombe somsebenzi wakho.</b>',
-    q5: 'Siyaqeda! <b>Yimiphi imisebenzi oyenzayo?</b>\n\nBhala eyodwa ngomugqa:\n<i>Ukupenda ngaphakathi\nUkupenda ngaphandle</i>',
+    q5: 'Siyaqeda! Sikhulume ngomsebenzi wakho:\n\n1. Iminyaka emingaki?\n2. Imisebenzi emi-3 enkulu?\n3. Yini okwenza ube ngcono?',
     uploading: 'Iyalayisha...',
     building: 'Yakha iwebhusayithi... Imizuzwana engu-30.',
     done: url => 'Iwebhusayithi yakho iphila!\n\n<b>' + url + '</b>\n\nSiyakwamukela ku-Mzansi Pros!',
@@ -125,7 +125,7 @@ const L = {
     q2: s => 'Kulungile - <b>' + s.name + '</b>\n\n<b>Yeyiphi indawo osebenza kuyo?</b>',
     q3: '<b>Yintoni inombolo yakho yomnxeba?</b>',
     q4: '<b>Thumela umfanekiso womsebenzi wakho.</b>',
-    q5: 'Siyaphela! <b>Yimiphi imisebenzi oyenzayo?</b>\n\nBhala enye ngomgca:\n<i>Ukupenda ngaphakathi\nUkupenda ngaphandle</i>',
+    q5: 'Siyaphela! Sithethe ngomsebenzi wakho:\n\n1. Iminyaka emingaphi?\n2. Iinkonzo ezi-3 eziphambili?\n3. Yintoni ekwenza ube ngcono?',
     uploading: 'Iyalayisha...',
     building: 'Yakha iwebhusayithi... Imizuzu engama-30.',
     done: url => 'Iwebhusayithi yakho iphilile!\n\n<b>' + url + '</b>\n\nWamkelekile ku-Mzansi Pros!',
@@ -185,30 +185,87 @@ async function handle(chatId, message) {
   }
   if (s.step === 4) {
     if (!message.text) return sendMessage(chatId, 'Please send a text reply.')
-    s.data.services = message.text.trim()
+    s.data.raw_info = message.text.trim()
     await sendMessage(chatId, m.building)
     try {
-      const lines = s.data.services.split('\n').filter(Boolean)
       const phone = s.data.phone
       const wa = '27' + phone.replace(/^0/, '')
+
+      // Use Claude to expand raw info into professional copy
+      const copy = await generateCopy(s.data)
+
       const result = await deployToVercel({
-        business_name: s.data.name, tagline: 'Professional services in ' + s.data.area,
-        service_description: s.data.services, location_area: s.data.area,
-        phone_number: phone, whatsapp_number: wa,
+        business_name: s.data.name,
+        tagline: copy.tagline,
+        service_description: copy.about,
+        location_area: s.data.area,
+        phone_number: phone,
+        whatsapp_number: wa,
         hero_image_url: s.data.photoUrl || '',
-        service_1: lines[0] || '', service_1_desc: '', service_1_price: '',
-        service_2: lines[1] || '', service_2_desc: '', service_2_price: '',
-        service_3: lines[2] || '', service_3_desc: '', service_3_price: '',
-        service_4: lines[3] || '', service_4_desc: '', service_4_price: '',
-        service_5: lines[4] || '', service_5_desc: '', service_5_price: '',
+        service_1: copy.services[0]?.name || '', service_1_desc: copy.services[0]?.desc || '', service_1_price: '',
+        service_2: copy.services[1]?.name || '', service_2_desc: copy.services[1]?.desc || '', service_2_price: '',
+        service_3: copy.services[2]?.name || '', service_3_desc: copy.services[2]?.desc || '', service_3_price: '',
+        service_4: copy.services[3]?.name || '', service_4_desc: copy.services[3]?.desc || '', service_4_price: '',
+        service_5: copy.services[4]?.name || '', service_5_desc: copy.services[4]?.desc || '', service_5_price: '',
         gallery_1: s.data.photoUrl || '', gallery_2: '', gallery_3: '', gallery_4: '', gallery_5: '', gallery_6: '',
-        testimonial_text: '', testimonial_name: '', testimonial_suburb: '', operating_hours: 'Mon-Sat, 7am-6pm'
+        testimonial_text: '', testimonial_name: '', testimonial_suburb: '',
+        operating_hours: 'Mon-Sat, 7am-6pm'
       })
       if (result.url) {
         await sendMessage(chatId, m.done('https://' + result.url))
         delete sessions[chatId]
       } else throw new Error(JSON.stringify(result))
     } catch (e) { console.error(e); return sendMessage(chatId, m.err) }
+  }
+}
+
+function claudeRequest(prompt) {
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) return Promise.resolve(null)
+  const body = JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+  return new Promise((resolve) => {
+    const opts = { hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }
+    const req = https.request(opts, res => { let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d).content?.[0]?.text || '') } catch { resolve('') } }) })
+    req.on('error', () => resolve('')); req.write(body); req.end()
+  })
+}
+
+async function generateCopy(data) {
+  const prompt = `You are writing website copy for a South African tradesperson. Write in plain, professional English. No corporate jargon.
+
+Business name: ${data.name}
+Area: ${data.area}
+What they told us: "${data.raw_info}"
+
+Generate website copy. Return ONLY valid JSON:
+{
+  "tagline": "One sentence. Trade + area + key strength. Max 10 words.",
+  "about": "2-3 sentences about them. Professional, warm, specific. What they do, experience, why customers trust them.",
+  "services": [
+    {"name": "Service name", "desc": "One sentence description."},
+    {"name": "Service name", "desc": "One sentence description."},
+    {"name": "Service name", "desc": "One sentence description."}
+  ]
+}
+
+Extract services from what they said. If they listed services, use those. Make descriptions specific and useful to a customer.`
+
+  const response = await claudeRequest(prompt)
+  if (!response) return fallbackCopy(data)
+
+  try {
+    const match = response.replace(/```json\s*/g, '').replace(/```/g, '').match(/\{[\s\S]*\}/)
+    if (match) return JSON.parse(match[0])
+  } catch (e) { console.error('copy parse error', e) }
+  return fallbackCopy(data)
+}
+
+function fallbackCopy(data) {
+  const lines = (data.raw_info || '').split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2 && s.length < 50)
+  return {
+    tagline: 'Professional services in ' + data.area,
+    about: data.name + ' provides professional services in ' + data.area + '.',
+    services: lines.slice(0, 5).map(l => ({ name: l, desc: '' }))
   }
 }
 
