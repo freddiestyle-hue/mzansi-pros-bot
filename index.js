@@ -293,6 +293,39 @@ function tgEditMarkup(chatId, messageId, markup) {
   })
 }
 
+function sendEmail(to, subject, body) {
+  const net = require('net')
+  const tls = require('tls')
+  const user = process.env.GMAIL_USER
+  const pass = process.env.GMAIL_PASS
+  const from = process.env.GMAIL_FROM || user
+  if (!user || !pass || !to) return Promise.resolve({ ok: false, reason: 'missing config or recipient' })
+
+  return new Promise((resolve) => {
+    const socket = tls.connect(465, 'smtp.gmail.com', { servername: 'smtp.gmail.com' }, () => {
+      const creds = Buffer.from('\0' + user + '\0' + pass).toString('base64')
+      const msgs = [
+        `EHLO gmail.com\r\n`,
+        `AUTH PLAIN ${creds}\r\n`,
+        `MAIL FROM:<${from}>\r\n`,
+        `RCPT TO:<${to}>\r\n`,
+        `DATA\r\n`,
+        `From: Fred Style <${from}>\r\nTo: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}\r\n.\r\n`,
+        `QUIT\r\n`
+      ]
+      let step = 0
+      socket.on('data', d => {
+        const line = d.toString()
+        if (step < msgs.length) { socket.write(msgs[step++]) }
+        else { socket.end(); resolve({ ok: true }) }
+      })
+      socket.on('error', e => resolve({ ok: false, reason: e.message }))
+      socket.on('end', () => resolve({ ok: true }))
+    })
+    socket.on('error', e => resolve({ ok: false, reason: e.message }))
+  })
+}
+
 async function handleCallback(cb) {
   const data = cb.data || ''
   const chatId = cb.message?.chat?.id
@@ -303,17 +336,32 @@ async function handleCallback(cb) {
   if (!['approve','skip','reject'].includes(action) || isNaN(idx)) return
 
   const FRED = process.env.FRED_CHAT_ID || '6850556217'
-  const labels = { approve: 'Approved', skip: 'Skipped', reject: 'Rejected' }
-  const emojis = { approve: 'Approved', skip: 'Skipped', reject: 'Rejected' }
 
-  // Store in memory keyed by idx
+  // Store decision
   sdrQueue[idx] = { action, ts: new Date().toISOString() }
 
   // Remove buttons
   await tgEditMarkup(chatId, messageId, { inline_keyboard: [] })
-  // Confirm
-  await sendMessage(FRED, `${labels[action]} #${idx + 1}`)
   await tgAnswerCallback(cb.id)
+
+  if (action === 'approve') {
+    // Pull prospect data from queue entry stored in memory
+    const prospect = sdrQueue[idx]?.prospect
+    if (prospect && prospect.prospect_email) {
+      const result = await sendEmail(prospect.prospect_email, prospect.email_subject, prospect.email_body)
+      if (result.ok) {
+        await sendMessage(FRED, `Sent to ${prospect.prospect_email} - ${prospect.company_name}`)
+      } else {
+        await sendMessage(FRED, `Approved but email failed: ${result.reason}\n\nForward manually:\nTo: ${prospect.prospect_email}\nSubject: ${prospect.email_subject}\n\n${prospect.email_body}`)
+      }
+    } else {
+      await sendMessage(FRED, `Approved #${idx + 1} - no email address found. Needs manual send.`)
+    }
+  } else if (action === 'skip') {
+    await sendMessage(FRED, `Skipped #${idx + 1}`)
+  } else if (action === 'reject') {
+    await sendMessage(FRED, `Rejected #${idx + 1}`)
+  }
 }
 
 const PORT = process.env.PORT || 3000
