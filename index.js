@@ -364,6 +364,9 @@ async function handleCallback(cb) {
   }
 }
 
+// Start reply watcher in background
+try { require('./reply-watcher') } catch (e) { console.error('[Reply Watcher] Failed to start:', e.message) }
+
 const PORT = process.env.PORT || 3000
 http.createServer((req, res) => {
   if (req.method === 'GET') { res.end('Mzansi Pros Bot'); return }
