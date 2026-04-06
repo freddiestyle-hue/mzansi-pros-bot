@@ -1,5 +1,6 @@
 const https = require('https')
 const http = require('http')
+const fs = require('fs')
 
 const sessions = {}
 
@@ -367,6 +368,150 @@ async function handleCallback(cb) {
 // Start reply watcher in background
 try { require('./reply-watcher') } catch (e) { console.error('[Reply Watcher] Failed to start:', e.message) }
 
+// Cal.com webhook + reminder addon
+// Paste this block BEFORE the http.createServer line in index.js
+
+const REMINDERS_FILE = '/tmp/cal-reminders.json'
+const FRED_CHAT_ID = '6850556217'
+const SMTP_HOST = 'smtp.gmail.com'
+const SMTP_PORT = 587
+const SMTP_USER = 'fred.rivett.consulting@gmail.com'
+const SMTP_PASS = 'ztgsjrvcygvmsfsd'
+const FROM_EMAIL = 'fred@rivett.tech'
+
+function loadReminders() {
+  try { return JSON.parse(fs.readFileSync(REMINDERS_FILE, 'utf8')) } catch { return [] }
+}
+function saveReminders(r) { fs.writeFileSync(REMINDERS_FILE, JSON.stringify(r, null, 2)) }
+
+function sendEmail(to, subject, text, html) {
+  return new Promise((resolve, reject) => {
+    const boundary = 'RIVETT_' + Date.now()
+    const auth = Buffer.from('\0' + SMTP_USER + '\0' + SMTP_PASS).toString('base64')
+    const body = html
+      ? `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${text}\r\n--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${html}\r\n--${boundary}--`
+      : text
+    const contentType = html ? `multipart/alternative; boundary="${boundary}"` : 'text/plain; charset=UTF-8'
+    const net = require('net')
+    const tls = require('tls')
+    let socket = net.connect(SMTP_PORT, SMTP_HOST)
+    let secure = false
+    let buf = ''
+    let step = 0
+    const steps = [
+      () => socket.write('EHLO rivett.tech\r\n'),
+      () => socket.write('STARTTLS\r\n'),
+      () => {
+        socket = tls.connect({ socket, servername: SMTP_HOST }, () => { socket.write('EHLO rivett.tech\r\n') })
+        socket.on('data', d => handle(d.toString()))
+        socket.on('error', reject)
+        secure = true
+      },
+      () => socket.write(`AUTH PLAIN ${auth}\r\n`),
+      () => socket.write(`MAIL FROM:<${FROM_EMAIL}>\r\n`),
+      () => socket.write(`RCPT TO:<${to}>\r\n`),
+      () => socket.write('DATA\r\n'),
+      () => socket.write(`From: Fred Style <${FROM_EMAIL}>\r\nTo: ${to}\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: ${contentType}\r\n\r\n${body}\r\n.\r\n`),
+      () => { socket.write('QUIT\r\n'); socket.end(); resolve() }
+    ]
+    function handle(data) {
+      buf += data
+      if (!buf.includes('\r\n')) return
+      const lines = buf.split('\r\n'); buf = lines.pop()
+      for (const line of lines) {
+        const code = parseInt(line)
+        if (isNaN(code)) continue
+        if (code >= 400) { socket.end(); reject(new Error(line)); return }
+        if (step === 2 && !secure) { steps[step](); step++ }
+        else if (step < steps.length) { if (step !== 2) steps[step](); step++ }
+      }
+    }
+    socket.on('data', d => { if (!secure) handle(d.toString()) })
+    socket.on('error', reject)
+  })
+}
+
+function formatDT(isoStr) {
+  try {
+    return new Date(isoStr).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', dateStyle: 'full', timeStyle: 'short' })
+  } catch { return isoStr }
+}
+
+async function handleCalBooking(payload) {
+  try {
+    const attendee = (payload.attendees && payload.attendees[0]) || {}
+    const name = attendee.name || payload.bookerName || 'Someone'
+    const email = attendee.email || payload.bookerEmail || ''
+    const startTime = payload.startTime || ''
+    const endTime = payload.endTime || ''
+    const startFmt = formatDT(startTime)
+    const endFmt = formatDT(endTime)
+
+    // Telegram alert to Fred
+    const tgMsg = `📅 New booking: <b>${name}</b>\n📧 ${email}\n🕐 ${startFmt}\n\nRivett Discovery Call booked.`
+    await sendMessage(FRED_CHAT_ID, tgMsg)
+
+    // Confirmation email to attendee
+    if (email) {
+      const subject = "You're booked with Fred from Rivett"
+      const text = `Hi ${name},\n\nThanks for grabbing time - looking forward to it.\n\nQuick context: we help founders like you build agentic systems for acquisition and activation. No agencies, no tools - just systems that run your pipeline.\n\nWe'll dig into what's working (and what isn't) in your current setup during the call.\n\nSee you then.\n\nFred\nFounder, Rivett\nrivett.tech`
+      const html = `<p>Hi ${name},</p><p>Thanks for grabbing time - looking forward to it.</p><p>Quick context: we help founders like you build agentic systems for acquisition and activation. No agencies, no tools - just systems that run your pipeline.</p><p>We'll dig into what's working (and what isn't) in your current setup during the call.</p><p>See you then.</p><p>Fred<br>Founder, Rivett<br><a href="https://rivett.tech">rivett.tech</a></p>`
+      await sendEmail(email, subject, text, html)
+    }
+
+    // Schedule reminders
+    if (startTime && email) {
+      const startMs = new Date(startTime).getTime()
+      const reminders = loadReminders()
+      reminders.push({
+        id: `${email}_${startMs}`,
+        name, email, startTime, endTime,
+        reminderTimes: [startMs - 24 * 60 * 60 * 1000, startMs - 60 * 60 * 1000],
+        sent: []
+      })
+      saveReminders(reminders)
+    }
+
+    console.log(`[Cal] Booking handled: ${name} ${email} at ${startFmt}`)
+  } catch (e) {
+    console.error('[Cal] Error handling booking:', e.message)
+  }
+}
+
+async function sendReminderEmail(r, isOneHour) {
+  const startFmt = formatDT(r.startTime)
+  const subject = isOneHour ? 'Jumping on in 60 mins' : 'Tomorrow at ' + new Date(r.startTime).toLocaleTimeString('en-ZA', { timeZone: 'Africa/Johannesburg', timeStyle: 'short' }) + ' - call with Fred from Rivett'
+  const text = isOneHour
+    ? `We're live in an hour.\n\nBefore we start - what's your current stack looking like? (marketing automation, CRM, outbound tools, whatever you're using). And what's the biggest bottleneck right now?\n\nJust reply here or we can dig into it on the call - whatever works.\n\nSee you in 60.\n\nFred`
+    : `Hi ${r.name},\n\nJust confirming we're on for tomorrow at ${startFmt}.\n\nBring any questions about your current marketing or sales ops - we'll be looking at how agentic systems fit into what you're already doing.\n\nTalk soon.\n\nFred`
+  await sendEmail(r.email, subject, text, null)
+}
+
+// Reminder checker - runs every 15 mins
+setInterval(async () => {
+  const now = Date.now()
+  const reminders = loadReminders()
+  let changed = false
+  for (const r of reminders) {
+    for (let i = 0; i < r.reminderTimes.length; i++) {
+      const key = `r${i}`
+      if (!r.sent.includes(key) && now >= r.reminderTimes[i] && now < r.reminderTimes[i] + 10 * 60 * 1000) {
+        const isOneHour = i === 1
+        try {
+          await sendReminderEmail(r, isOneHour)
+          const label = isOneHour ? '1hr' : '24hr'
+          await sendMessage(FRED_CHAT_ID, `⏰ Reminder sent to ${r.name} (${label} before call)`)
+          r.sent.push(key)
+          changed = true
+          console.log(`[Cal] Reminder sent: ${r.email} ${label}`)
+        } catch (e) { console.error('[Cal] Reminder error:', e.message) }
+      }
+    }
+  }
+  if (changed) saveReminders(reminders)
+}, 15 * 60 * 1000)
+
+
 const PORT = process.env.PORT || 3000
 http.createServer((req, res) => {
   if (req.method === 'GET') { res.end('Mzansi Pros Bot'); return }
@@ -375,6 +520,14 @@ http.createServer((req, res) => {
   req.on('data', c => body += c)
   req.on('end', async () => {
     try {
+      if (req.url === '/cal-webhook') {
+        const payload = JSON.parse(body)
+        // Cal.com sends triggerEvent on the wrapper
+        if (payload.triggerEvent === 'BOOKING_CREATED' || payload.type === 'BOOKING_CREATED') {
+          await handleCalBooking(payload.payload || payload)
+        }
+        res.writeHead(200); res.end('ok'); return
+      }
       const update = JSON.parse(body)
       if (update.callback_query) {
         await handleCallback(update.callback_query)
